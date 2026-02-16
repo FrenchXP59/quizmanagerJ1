@@ -1,368 +1,205 @@
-import { useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
+import { questions } from '@/data/questions';
+import { calculateScores } from '@/utils/scoring';
+import MainLayout from '@/components/Layout/MainLayout';
+import ProgressBar from '@/components/Layout/ProgressBar';
+import ModuleIntro from '@/components/Quiz/ModuleIntro';
+import QuestionCard from '@/components/Quiz/QuestionCard';
+import ResultsRadar from '@/components/Results/RadarChart';
+import DetailedAnalysis from '@/components/Results/DetailedAnalysis';
+import { ArrowRight, RotateCcw } from 'lucide-react';
 
-interface Question {
-  id: number;
-  text: string;
-  style: 'directif' | 'persuasif' | 'participatif' | 'delegatif';
-}
-
-interface StyleResult {
-  name: string;
-  score: number;
-  description: string;
-  characteristics: string[];
-  color: string;
-}
-
-const questions: Question[] = [
-  // Questions Directif (fort pilotage, faible soutien)
-  { id: 1, text: "Je donne des instructions précises et détaillées à mon équipe", style: 'directif' },
-  { id: 2, text: "Je supervise étroitement le travail de mes collaborateurs", style: 'directif' },
-  { id: 3, text: "Je prends les décisions importantes sans consulter l'équipe", style: 'directif' },
-  { id: 4, text: "Je définis clairement les objectifs et les échéances", style: 'directif' },
-  { id: 5, text: "Je contrôle régulièrement l'avancement des tâches", style: 'directif' },
-  { id: 6, text: "Je privilégie l'efficacité à court terme", style: 'directif' },
-
-  // Questions Persuasif (fort pilotage, fort soutien)
-  { id: 7, text: "J'explique le pourquoi de mes décisions à l'équipe", style: 'persuasif' },
-  { id: 8, text: "Je motive mon équipe en valorisant les résultats", style: 'persuasif' },
-  { id: 9, text: "Je guide tout en encourageant les initiatives", style: 'persuasif' },
-  { id: 10, text: "Je forme activement mes collaborateurs", style: 'persuasif' },
-  { id: 11, text: "Je communique régulièrement sur la vision et les objectifs", style: 'persuasif' },
-  { id: 12, text: "Je soutiens mon équipe face aux difficultés", style: 'persuasif' },
-
-  // Questions Participatif (faible pilotage, fort soutien)
-  { id: 13, text: "Je consulte mon équipe avant de prendre des décisions", style: 'participatif' },
-  { id: 14, text: "J'encourage les idées et suggestions de mes collaborateurs", style: 'participatif' },
-  { id: 15, text: "Je facilite les échanges et la collaboration", style: 'participatif' },
-  { id: 16, text: "Je fais confiance à l'expertise de mon équipe", style: 'participatif' },
-  { id: 17, text: "Je privilégie le consensus dans les décisions", style: 'participatif' },
-  { id: 18, text: "Je développe l'autonomie de mes collaborateurs", style: 'participatif' },
-
-  // Questions Délégatif (faible pilotage, faible soutien)
-  { id: 19, text: "Je laisse mon équipe s'organiser librement", style: 'delegatif' },
-  { id: 20, text: "J'interviens peu dans le travail quotidien", style: 'delegatif' },
-  { id: 21, text: "Je fais confiance à l'autonomie complète de l'équipe", style: 'delegatif' },
-  { id: 22, text: "Je délègue la plupart des responsabilités", style: 'delegatif' },
-  { id: 23, text: "Je me concentre sur la stratégie plutôt que l'opérationnel", style: 'delegatif' },
-  { id: 24, text: "Je laisse l'équipe gérer ses propres conflits", style: 'delegatif' }
+const MODULES = [
+  { id: 'decision', title: 'Prise de Décision', description: 'Comment abordez-vous les choix stratégiques et opérationnels ?' },
+  { id: 'beginner', title: 'Management d\'un Débutant', description: 'Votre posture face à un collaborateur en phase d\'apprentissage.' },
+  { id: 'expert', title: 'Management d\'un Expert', description: 'Comment interagissez-vous avec un collaborateur autonome et compétent ?' },
+  { id: 'crisis', title: 'Gestion de Crise', description: 'Vos réflexes en situation d\'urgence ou de turbulences.' },
+  { id: 'stress', title: 'Sous Pression', description: 'Analyse de vos comportements réflexes en situation de stress intense.', isStress: true }
 ];
 
-const styleDescriptions = {
-  directif: {
-    name: "Directif",
-    description: "Vous privilégiez un pilotage fort avec un soutien limité. Vous donnez des directives claires et supervisez étroitement le travail.",
-    characteristics: [
-      "Instructions précises et détaillées",
-      "Supervision étroite",
-      "Décisions centralisées",
-      "Contrôle régulier",
-      "Focus sur l'efficacité"
-    ],
-    color: "#ef4444"
-  },
-  persuasif: {
-    name: "Persuasif",
-    description: "Vous combinez un pilotage fort avec un soutien élevé. Vous guidez tout en motivant et en expliquant vos décisions.",
-    characteristics: [
-      "Communication des objectifs",
-      "Motivation de l'équipe",
-      "Formation active",
-      "Soutien face aux difficultés",
-      "Explication des décisions"
-    ],
-    color: "#f59e0b"
-  },
-  participatif: {
-    name: "Participatif",
-    description: "Vous adoptez un pilotage modéré avec un fort soutien. Vous consultez l'équipe et encouragez la collaboration.",
-    characteristics: [
-      "Consultation de l'équipe",
-      "Encouragement des idées",
-      "Facilitation des échanges",
-      "Développement de l'autonomie",
-      "Recherche de consensus"
-    ],
-    color: "#10b981"
-  },
-  delegatif: {
-    name: "Délégatif",
-    description: "Vous privilégiez un pilotage minimal avec un soutien limité. Vous faites confiance à l'autonomie complète de l'équipe.",
-    characteristics: [
-      "Délégation importante",
-      "Autonomie complète",
-      "Intervention minimale",
-      "Focus stratégique",
-      "Confiance totale"
-    ],
-    color: "#6366f1"
-  }
-};
-
 const Index = () => {
-  const [currentQuestion, setCurrentQuestion] = useState(0);
+  const [currentModuleIndex, setCurrentModuleIndex] = useState(-1); // -1 = Global Intro
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<number, number>>({});
-  const [showResults, setShowResults] = useState(false);
-  const [selectedAnswer, setSelectedAnswer] = useState<string>('');
+  const [isFinished, setIsFinished] = useState(false);
+  const [showModuleIntro, setShowModuleIntro] = useState(false);
 
-  const handleAnswer = (value: string) => {
-    const score = parseInt(value);
-    setAnswers(prev => ({ ...prev, [questions[currentQuestion].id]: score }));
-    setSelectedAnswer(value);
+  // Filter questions for current module
+  const currentModule = MODULES[currentModuleIndex];
+  const moduleQuestions = useMemo(() => {
+    if (!currentModule) return [];
+    return questions.filter(q => q.module === currentModule.id);
+  }, [currentModule]);
+
+  // Global Progress
+  const totalQuestions = questions.length;
+  const answeredCount = Object.keys(answers).length;
+
+  const handleStart = () => {
+    setCurrentModuleIndex(0);
+    setShowModuleIntro(true);
   };
 
-  const nextQuestion = () => {
-    if (currentQuestion < questions.length - 1) {
-      setCurrentQuestion(prev => prev + 1);
-      setSelectedAnswer(answers[questions[currentQuestion + 1]?.id]?.toString() || '');
-    } else {
-      setShowResults(true);
-    }
+  const handleModuleStart = () => {
+    setShowModuleIntro(false);
   };
 
-  const previousQuestion = () => {
-    if (currentQuestion > 0) {
-      setCurrentQuestion(prev => prev - 1);
-      setSelectedAnswer(answers[questions[currentQuestion - 1]?.id]?.toString() || '');
-    }
+  const handleAnswer = (score: number) => {
+    const currentQ = moduleQuestions[currentQuestionIndex];
+    setAnswers(prev => ({ ...prev, [currentQ.id]: score }));
+
+    // Delay to show selection feedback
+    setTimeout(() => {
+      if (currentQuestionIndex < moduleQuestions.length - 1) {
+        setCurrentQuestionIndex(prev => prev + 1);
+      } else {
+        // End of module
+        if (currentModuleIndex < MODULES.length - 1) {
+          setCurrentModuleIndex(prev => prev + 1);
+          setCurrentQuestionIndex(0);
+          setShowModuleIntro(true);
+        } else {
+          finishQuiz();
+        }
+      }
+    }, 400);
   };
 
-  const calculateResults = (): StyleResult[] => {
-    const scores = {
-      directif: 0,
-      persuasif: 0,
-      participatif: 0,
-      delegatif: 0
-    };
-
-    questions.forEach(question => {
-      const answer = answers[question.id] || 0;
-      scores[question.style] += answer;
-    });
-
-    return Object.entries(scores).map(([style, score]) => ({
-      name: styleDescriptions[style as keyof typeof styleDescriptions].name,
-      score: Math.round((score / 24) * 100), // Pourcentage sur 24 points max (6 questions × 4 points)
-      description: styleDescriptions[style as keyof typeof styleDescriptions].description,
-      characteristics: styleDescriptions[style as keyof typeof styleDescriptions].characteristics,
-      color: styleDescriptions[style as keyof typeof styleDescriptions].color
-    }));
+  const finishQuiz = () => {
+    setIsFinished(true);
   };
 
   const restartQuiz = () => {
-    setCurrentQuestion(0);
     setAnswers({});
-    setShowResults(false);
-    setSelectedAnswer('');
+    setCurrentModuleIndex(-1);
+    setCurrentQuestionIndex(0);
+    setIsFinished(false);
+    setShowModuleIntro(false);
   };
 
-  const progress = ((currentQuestion + 1) / questions.length) * 100;
-  const results = showResults ? calculateResults() : [];
-  const dominantStyle = results.length > 0 ? results.reduce((prev, current) => (prev.score > current.score) ? prev : current) : null;
+  // --- VIEWS ---
 
-  const radarData = results.map(result => ({
-    style: result.name,
-    score: result.score
-  }));
+  if (isFinished) {
+    const results = calculateScores(answers);
 
-  if (showResults) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-        <div className="max-w-4xl mx-auto">
-          <Card className="mb-8">
-            <CardHeader className="text-center">
-              <CardTitle className="text-3xl font-bold text-gray-800">Vos Résultats</CardTitle>
-              <CardDescription className="text-lg">
-                Quiz d'auto-positionnement sur les styles managériaux
-              </CardDescription>
-            </CardHeader>
-          </Card>
-
-          {dominantStyle && (
-            <Card className="mb-8 border-l-4" style={{ borderLeftColor: dominantStyle.color }}>
-              <CardHeader>
-                <div className="flex items-center gap-3">
-                  <Badge 
-                    className="text-white px-3 py-1" 
-                    style={{ backgroundColor: dominantStyle.color }}
-                  >
-                    Style Dominant
-                  </Badge>
-                  <CardTitle className="text-2xl">{dominantStyle.name}</CardTitle>
-                  <span className="text-xl font-semibold text-gray-600">{dominantStyle.score}%</span>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <p className="text-gray-700 mb-4">{dominantStyle.description}</p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  {dominantStyle.characteristics.map((char, index) => (
-                    <div key={index} className="flex items-center gap-2">
-                      <div 
-                        className="w-2 h-2 rounded-full" 
-                        style={{ backgroundColor: dominantStyle.color }}
-                      ></div>
-                      <span className="text-sm text-gray-600">{char}</span>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-            <Card>
-              <CardHeader>
-                <CardTitle>Graphique Radar</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <RadarChart data={radarData}>
-                    <PolarGrid />
-                    <PolarAngleAxis dataKey="style" />
-                    <PolarRadiusAxis angle={90} domain={[0, 100]} />
-                    <Radar
-                      name="Score"
-                      dataKey="score"
-                      stroke="#6366f1"
-                      fill="#6366f1"
-                      fillOpacity={0.3}
-                      strokeWidth={2}
-                    />
-                  </RadarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Scores Détaillés</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={results}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
-                    <YAxis domain={[0, 100]} />
-                    <Tooltip formatter={(value) => [`${value}%`, 'Score']} />
-                    <Bar dataKey="score" fill="#6366f1" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
+      <MainLayout>
+        <div className="space-y-12 animate-in fade-in duration-700">
+          <div className="text-center space-y-4">
+            <h1 className="text-4xl font-bold text-slate-900">Votre Profil Managérial</h1>
+            <p className="text-xl text-slate-600 max-w-2xl mx-auto">
+              Analyse complète de vos dynamiques de pilotage et de soutien.
+            </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-            {results.map((result, index) => (
-              <Card key={index} className="border-l-4" style={{ borderLeftColor: result.color }}>
-                <CardHeader>
-                  <div className="flex justify-between items-center">
-                    <CardTitle className="text-lg">{result.name}</CardTitle>
-                    <Badge variant="outline">{result.score}%</Badge>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-gray-600 mb-3">{result.description}</p>
-                  <div className="space-y-1">
-                    {result.characteristics.map((char, charIndex) => (
-                      <div key={charIndex} className="flex items-center gap-2">
-                        <div 
-                          className="w-1.5 h-1.5 rounded-full" 
-                          style={{ backgroundColor: result.color }}
-                        ></div>
-                        <span className="text-xs text-gray-500">{char}</span>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
+            {/* Visualisation Radar */}
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+              <h3 className="text-lg font-semibold text-slate-800 mb-6 text-center">Cartographie Dynamique</h3>
+              <ResultsRadar analysis={results} />
+              <div className="mt-6 flex justify-center gap-6 text-sm">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                  <span className="text-slate-600">Profil Naturel</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                  <span className="text-slate-600">Sous Stress</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Detailed Analysis */}
+            <DetailedAnalysis analysis={results} />
           </div>
 
-          <div className="text-center">
-            <Button onClick={restartQuiz} size="lg" className="bg-indigo-600 hover:bg-indigo-700">
-              Refaire le Quiz
+          <div className="flex justify-center pt-12 gap-4 print:hidden">
+            <Button onClick={() => window.print()} variant="default" size="lg" className="bg-slate-900 hover:bg-slate-800 gap-2">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-download"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" x2="12" y1="15" y2="3" /></svg>
+              Télécharger le rapport PDF
+            </Button>
+            <Button onClick={restartQuiz} variant="outline" size="lg" className="gap-2">
+              <RotateCcw className="w-4 h-4" /> Relancer le diagnostic
             </Button>
           </div>
         </div>
-      </div>
+      </MainLayout>
     );
   }
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-      <div className="max-w-2xl mx-auto">
-        <Card className="mb-8">
-          <CardHeader className="text-center">
-            <CardTitle className="text-3xl font-bold text-gray-800">Quiz Styles Managériaux</CardTitle>
-            <CardDescription className="text-lg">
-              Découvrez votre style de management dominant
-            </CardDescription>
-          </CardHeader>
-        </Card>
+  // --- INTRO SCREEN ---
+  if (currentModuleIndex === -1) {
+    return (
+      <MainLayout>
+        <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-8 animate-in zoom-in-95 duration-500">
+          <h1 className="text-5xl md:text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600 pb-2">
+            Leadership Scan 360°
+          </h1>
+          <p className="text-xl md:text-2xl text-slate-600 max-w-3xl leading-relaxed">
+            Un outil de diagnostic professionnel pour évaluer votre posture managériale,
+            vos réflexes sous pression et votre flexibilité d'adaptation.
+          </p>
 
-        <Card className="mb-6">
-          <CardHeader>
-            <div className="flex justify-between items-center mb-4">
-              <span className="text-sm text-gray-500">
-                Question {currentQuestion + 1} sur {questions.length}
-              </span>
-              <Badge variant="outline">{Math.round(progress)}% complété</Badge>
-            </div>
-            <Progress value={progress} className="mb-4" />
-            <CardTitle className="text-xl leading-relaxed">
-              {questions[currentQuestion].text}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <RadioGroup value={selectedAnswer} onValueChange={handleAnswer}>
-              <div className="space-y-4">
-                <div className="flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-50 transition-colors">
-                  <RadioGroupItem value="1" id="1" />
-                  <Label htmlFor="1" className="flex-1 cursor-pointer">Jamais</Label>
-                </div>
-                <div className="flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-50 transition-colors">
-                  <RadioGroupItem value="2" id="2" />
-                  <Label htmlFor="2" className="flex-1 cursor-pointer">Parfois</Label>
-                </div>
-                <div className="flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-50 transition-colors">
-                  <RadioGroupItem value="3" id="3" />
-                  <Label htmlFor="3" className="flex-1 cursor-pointer">Souvent</Label>
-                </div>
-                <div className="flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-50 transition-colors">
-                  <RadioGroupItem value="4" id="4" />
-                  <Label htmlFor="4" className="flex-1 cursor-pointer">Toujours</Label>
-                </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl w-full mt-8">
+            {[
+              { title: "15 Minutes", desc: "Diagnostic rapide et précis" },
+              { title: "5 Dimensions", desc: "Analyse situationnelle" },
+              { title: "Plan d'action", desc: "Pistes de développement" }
+            ].map((item, i) => (
+              <div key={i} className="p-6 bg-white rounded-xl shadow-sm border border-slate-100">
+                <div className="text-lg font-bold text-slate-900 mb-1">{item.title}</div>
+                <div className="text-slate-500">{item.desc}</div>
               </div>
-            </RadioGroup>
-          </CardContent>
-        </Card>
+            ))}
+          </div>
 
-        <div className="flex justify-between">
-          <Button 
-            onClick={previousQuestion} 
-            disabled={currentQuestion === 0}
-            variant="outline"
-          >
-            Précédent
-          </Button>
-          <Button 
-            onClick={nextQuestion} 
-            disabled={!selectedAnswer}
-            className="bg-indigo-600 hover:bg-indigo-700"
-          >
-            {currentQuestion === questions.length - 1 ? 'Voir les résultats' : 'Suivant'}
+          <Button onClick={handleStart} size="lg" className="mt-8 text-lg px-10 py-6 h-auto bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all hover:scale-105">
+            Démarrer le diagnostic <ArrowRight className="ml-2" />
           </Button>
         </div>
+      </MainLayout>
+    );
+  }
+
+  // --- MODULE INTRO ---
+  if (showModuleIntro) {
+    return (
+      <MainLayout>
+        <ProgressBar current={answeredCount} total={totalQuestions} />
+        <ModuleIntro
+          moduleName={currentModule.title}
+          description={currentModule.description}
+          onStart={handleModuleStart}
+          index={currentModuleIndex + 1}
+        />
+      </MainLayout>
+    );
+  }
+
+  // --- QUESTION CARD ---
+  const currentQuestion = moduleQuestions[currentQuestionIndex];
+  return (
+    <MainLayout>
+      <div className="max-w-2xl mx-auto">
+        <ProgressBar current={answeredCount} total={totalQuestions} />
+
+        <div className="mb-6 flex justify-between items-center text-sm text-slate-400 uppercase tracking-widest font-medium">
+          <span>Module {currentModuleIndex + 1}/{MODULES.length}</span>
+          <span>{currentModule.title}</span>
+        </div>
+
+        <QuestionCard
+          key={currentQuestion.id} // Force re-render animation
+          questionText={currentQuestion.text}
+          currentAnswer={answers[currentQuestion.id]}
+          onAnswer={handleAnswer}
+          className="animate-in slide-in-from-right-8 duration-500"
+        />
       </div>
-    </div>
+    </MainLayout>
   );
 };
 
 export default Index;
+
